@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 'lts/*'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Extract version from release tag
+        id: version
+        run: |
+          # Remove 'v' prefix if present (e.g., v1.2.3 -> 1.2.3)
+          TAG_NAME="${{ github.event.release.tag_name }}"
+          VERSION=${TAG_NAME#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Release tag: $TAG_NAME"
+          echo "Release version: $VERSION"
+      - name: Verify npm and check files
+        run: |
+          npm --version
+          node --version
+          ls -la package.json package-lock.json
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit
+      - name: Update package.json version
+        run: |
+          npm version ${{ steps.version.outputs.version }} --no-git-tag-version
+      - name: Run tests
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Publish to npm
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
